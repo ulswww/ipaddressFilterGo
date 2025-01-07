@@ -8,7 +8,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+
 	// "strconv"
+	"os/exec"
 	"strings"
 )
 
@@ -19,32 +21,87 @@ func check(e error) {
 }
 func main() {
 
-	ipfile, err := os.Open("./ip.txt")
+	// optionally, resize scanner's capacity for lines over 64K, see next example
+	// fmt.Println(ipRange)
+	// fmt.Println(s)
+	addresses := findIpRange("./IpRange.txt")
+
+	writeToIpTxt("./Ip.txt", addresses)
+
+	runSpeedProgran()
+
+}
+
+func runSpeedProgran() {
+
+	app := "./CloudflareST.exe"
+	arg0 := "-tll"
+	arg1 := "50"
+	arg2 := "-tl"
+	arg3 := "200"
+
+	cmd := exec.Command(app, arg0, arg1, arg2, arg3)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
+func writeToIpTxt(filePath string, addresses []string) {
+
+	if fileExists(filePath) {
+		os.Remove(filePath)
+	}
+
+	ipfile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0644)
+
+	check(err)
+
+	defer ipfile.Close()
+
+	for _, v := range addresses {
+		ipfile.WriteString(v + "\n")
+	}
+}
+
+func findIpRange(filePath string) []string {
+	ipfile, err := os.Open(filePath)
 
 	check(err)
 
 	defer ipfile.Close()
 
 	scanner := bufio.NewScanner(ipfile)
-	// optionally, resize scanner's capacity for lines over 64K, see next example
+
+	addresses := []string{}
+
 	for scanner.Scan() {
 		ipRange := scanner.Text()
-		// fmt.Println(ipRange)
+
 		spindex := strings.Index(ipRange, "/")
 		s := fmt.Sprintf("%s.1", ipRange[0:spindex-2])
-		// fmt.Println(s)
+
 		address, err := getAddressInfo(s)
 		if err != nil || address.isUSA() {
 			continue
 		}
 
 		fmt.Printf("%s is in %s \n", ipRange, address.CountryName)
+		addresses = append(addresses, ipRange)
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
-
+	return addresses
 }
 
 func getAddressInfo(ipAddress string) (*Address, error) {
